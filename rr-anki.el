@@ -46,10 +46,6 @@
 	(cons (car bds) (if (bounds-of-thing-at-point 'paragraph)
 			    (cdr (bounds-of-thing-at-point 'paragraph))
 			  (cdr bds)))))))
-						      
-	
-      
-	 
 
 ;;; cloze creation
 (defun rr-transform-to-cloze (uarg)
@@ -154,7 +150,7 @@
   (rr--google-translate uarg "de" "en"))
 
 
-(defun lookup--word-gen-list (word)
+(defun rr--depl-lookup-word-gen-list (word)
   ;; (get-buffer-create "workingxml")
   ;; (set-buffer "workingxml")
   ;; (erase-buffer)
@@ -173,7 +169,7 @@
 	lista))))
 
 
-(defun counsel-lookup-word (markstart markend)
+(defun rr-counsel-depl-lookup-word (markstart markend)
   "generate list of text from the dictionary"
   (interactive "r")
 
@@ -181,111 +177,13 @@
     (when (use-region-p)
       ;; we started with highlighted region
       (setq initword (buffer-substring-no-properties markstart markend)))
-    (ivy-read "Select word (at least 4 chars: " 'lookup--word-gen-list
-	      :caller 'counsel-lookup-word
+    (ivy-read "Select word (at least 4 chars: " 'rr--depl-lookup-word-gen-list
+	      :caller 'rr-counsel-depl-lookup-word
 	      :dynamic-collection t
 	      :initial-input initword
 	      :action #'(lambda (selected)
 			  (kill-new selected)
 			  (message "copied to kill ring")))))
-
-;; (defun rr-export-to-anki (filename)
-;;   "export cards to an csv file for import with Anki"
-;;   (interactive "F")
-;;   (get-buffer-create "workingxml")
-;;   (copy-to-buffer "workingxml" (point-min) (point-max))
-;;   (set-buffer "workingxml")
-;;   ;;(erase-buffer)
-
-;;   (goto-char (point-min))
-;;   (let ((breakloop 0)
-;; 	(last-head "X")
-;; 	head)
-;;     (while (and (= breakloop 0)
-;; 		(> (- (point-max) (line-beginning-position)) 2))
-;;       (setq head (buffer-substring-no-properties (line-beginning-position) (+ 2 (line-beginning-position))))
-;;       (cond ((string= "##" head)
-;; 	     (goto-char (line-beginning-position))
-;; 	     (delete-char 2)
-;; 	     (insert "<div>")
-;; 	     (goto-char (line-end-position))
-;; 	     (insert "</div>")
-;; 	     (when (string= last-head "#")
-;; 	       (goto-char (line-beginning-position))
-;; 	       (delete-char -1))
-;; 	     (setq last-head "#"))
-;; 	    ((string= "@@" head)
-;; 	     (goto-char (line-beginning-position))
-;; 	     (delete-char 2)
-;; 	     (insert "<div><i>")
-;; 	     (goto-char (line-end-position))
-;; 	     (insert "</i></div>")
-;; 	     (unless (string= last-head "@")
-;; 	       (insert "\t")
-;; 	       (setq last-head "@"))
-;; 	     (goto-char (line-beginning-position))
-;; 	     (delete-char -1))
-;; 	    ((string= "==" head)
-;; 	     (goto-char (line-beginning-position))
-;; 	     (delete-char 2)
-;; 	     (insert "<div>")
-;; 	     (goto-char (line-end-position))
-;; 	     (insert "</div>")
-;; 	     (unless (string= last-head "=")
-;; 	       (insert "\t")
-;; 	       (setq last-head "="))
-;; 	     (goto-char (line-beginning-position))
-;; 	     (delete-char -1))
-;; 	    (t
-;; 	     (message "Error: header unrecognized in line %d" (line-number-at-pos (point)))))
-;;       (setq breakloop (forward-line 1)))
-;;     ))
-
-
-
-
-
-
-;; (defun walk (node)
-;;   (if (not (listp node))
-;;       ;;  (message "%s" node)
-;;       (if (string= "\n" node)
-;; 	  ()
-;; 	(insert node))
-;;     ;; else
-;;     (let ((point-adv 0))
-;;       (if (string= "div" (xml-node-name node))
-;; 	  (insert "\n")
-;; 	(cond ((string= "bold" (xml-get-attribute node 'class))
-;; 	       (insert "")
-;; 	       (backward-char 0)
-;; 	       (setq point-adv 0))
-;; 	      ((string= "underline" (xml-get-attribute node 'class))
-;; 	       (insert "<u></u>")
-;; 	       (backward-char 4)
-;; 	       (setq point-adv 4))
-;; 	      ((string= "italic" (xml-get-attribute node 'class))
-;; 	       (insert "<i></i>")
-;; 	       (backward-char 4)
-;; 	       (setq point-adv 4))))
-;;       (mapc 'walk (xml-node-children node))
-;;       (forward-char point-adv))))
-
-;; (defun blek ()
-;;   "this function parses the output from the caluibre to make list of entries from depl dictionary"
-;;   (get-buffer-create "workingxml")
-;;   (set-buffer "workingxml")
-;;   (erase-buffer)
-;;   (let ((xxx (xml-parse-file "/home/rrybanie/depl.html")))
-;;     (when (not xxx)
-;;       (message "Error")
-;;       (message "%s" nxml-file-parse-error))
-;;     ;;(message "Lista: %s" xxx)
-;;     (walk (car xxx)))
-;;   (goto-char (point-min))
-;;   (delete-region (point-min) (- (search-forward "<u>Aachen" nil 1) 9)))
-
-
 
 ;; reverso context
 
@@ -343,21 +241,6 @@
       (push (format "%s\n/%s/" (pop senlst) (pop senlst)) candlst))
     candlst))
 
-
-;; (setq testhtml
-;;       '(html ((lang . "en") (dir . "ltr"))
-;; 	     (head nil
-;; 		   (body nil
-;; 			 (div ((id . "OPENSUBTITLES-2016.DE-EN_10843473") (class . "example")) "      "
-;; 			      (div ((class . "src ltr")) "        " (span ((class . "text") (lang . "de")) "          Ich werde meinen Freund " (em nil "Abelard") " bitten, es wieder zu übermalen.") "      ") "      "
-			      
-;; 			      (div ((class . "trg ltr")) "        " (span ((class . "icon jump-right"))) "        " (span ((class . "text")) "          I'll have my friend " (a ((class . "link_highlighted") (href . "/translation/english-german/Abelard") (rel . "nofollow")) (em nil "Abelard")) " come back and paint over it.") "      ") "      " 
-;; 			      (div ((class . "options")) "        " 
-;; 				   (div ((class . "src")) "          " (button ((data-id . "OPENSUBTITLES-2016.DE-EN_10843473") (class . "voice icon stopped") (title . "Pronunciation") (data-lang . "de"))) "          ") "        " 
-;; 				   (div ((class . "trg")) "          " (button ((class . "icon more-context") (title . "See this translation example in its context (http://opus.lingfil.uu.se/OpenSubtitles2016.php)") (data-id . "OPENSUBTITLES-2016.DE-EN_10843473"))) "          " (button ((class . "report icon thumb-down") (title . "Report a problem in this example") (data-id . "OPENSUBTITLES-2016.DE-EN_10843473"))) "          " (button ((class . "add icon addentry ") (title . "Add this translation to Reverso Collaborative Dictionary") (data-url . "http://dictionary.reverso.net/CollabDict.aspx?view=2&lang=EN") (data-id . "OPENSUBTITLES-2016.DE-EN_10843473") (data-text . "I'll have my friend <em>Abelard</em> come back and paint over it."))) "          " (button ((class . "copy icon mobile-hidden") (title . "Copy the translation") (data-id . "OPENSUBTITLES-2016.DE-EN_10843473"))) "          " (button ((class . "icon non-favourite ") (title . "Mark this example as favourite") (data-id . "OPENSUBTITLES-2016.DE-EN_10843473"))) "          " (button ((data-id . "OPENSUBTITLES-2016.DE-EN_10843473") (class . "voice icon stopped") (title . "Pronunciation") (data-lang . "en"))) "          ") "      ") "      " (button ((data-id . "OPENSUBTITLES-2016.DE-EN_10843473") (class . "mobile-voice icon stopped played"))) "      ")))))
-
-
-;; (rr--reverso-process-xml testhtml)
 
 
 (defun rr-counsel-reverso-lookup-word (markstart markend)
