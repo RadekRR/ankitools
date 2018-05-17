@@ -190,7 +190,7 @@
 (defun rr--reverso-get-xml (word)
   ;; connects with the reverso site, gets html and returns parsed xml
   (with-temp-buffer
-    (url-insert (url-retrieve-synchronously (format "http://context.reverso.net/translation/german-english/%s" word)))
+    (url-insert-file-contents (format "http://context.reverso.net/translation/german-english/%s" word))
     (libxml-parse-html-region (point-min) (point-max))))
 
 (defun rr--reverso-clean-text (lst)
