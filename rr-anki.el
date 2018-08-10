@@ -105,10 +105,37 @@
       (message "%s" numlist)
       (seq-max numlist))))
 
-(defun rr--google-translate (uarg fromlang tolang)
-  "make google translate for highlighted region or paragraph
-   automaticaly put text below or copy to kill-buffer when ARG"
-  (message "%s" current-prefix-arg)
+(defun rr--put-in-subheading (txt)
+  (save-excursion
+    (when (re-search-backward "^\\*[ ]" nil t) ;; find top heading
+      (forward-char)
+      (when (re-search-forward "^\\*+[ ]" nil t)
+	(backward-char)
+	(if (equal (char-before) ?*)
+	    (progn 
+	      (if (re-search-forward "^\\*+[ ]" nil t)
+		  (progn
+		    (forward-line -1)
+		    (forward-line))
+		;; last line
+		(goto-char (point-max))))
+	  ;;else
+	  (forward-line -1)
+	  (end-of-line)
+	  (insert (format "\n** \n")))
+	;; check if we need to add newline before
+	(forward-line -1)
+	(unless (re-search-forward "^[ ]*$" (line-end-position) t)
+	  (forward-line)
+	  (insert "\n")))
+      (insert (format "%s\n" txt)))))
+
+(defun rr--translate-sentence (uarg engine)
+  "make engine to translate highlighted region or paragraph
+   automaticaly put text below or copy to kill-buffer when ARG
+   engine takes one argument: txt to translate, should produce
+   results in current buffer"
+  ;;(message "%s" current-prefix-arg)
   (let (markstart markend bds)
     (if (use-region-p)
 	(setq markstart (region-beginning) markend (region-end))
@@ -124,30 +151,63 @@
 		(goto-char (point-min))
 		(while (re-search-forward "{{c[0-9]+::\\(.+?\\)\\(::.*?}}\\)\\|\\(}}\\)" nil 1)
 		  (replace-match "\\1"))
+		(goto-char (point-min))
+		(while (re-search-forward "^\\*" nil 1)
+		  (replace-match ""))
 		(setq txt (buffer-substring (point-min) (point-max)))
 		(erase-buffer)
-		(google-translate-translate fromlang tolang txt 'current-buffer)
+		(funcall engine txt)
 		(if uarg
 		    (progn 
 		      (kill-region (point-min) (point-max))
 		      (message "Translated text is in the kill buffer")
 		      nil)
 		  (setq txt (buffer-substring (point-min) (point-max)))
-		  (message "")))
+		  ;; (message (format "txt is %s" txt)))
+		))
 	  ;; we enter here only when uarg
 	  (goto-char markend)
 	  (when (> (length txt) 1)
 	    (insert (format "/%s/\n" txt))))))))
 
+
+(defun rr--deepl-engine (from to alternatives txt)
+  "translate txt from language to language and put in the current
+buffer when alternatives(Y/n) show alternatives"
+  (call-process "/home/rrybanie/tmp/translate-shell/translate" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" alternatives "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt ))
+
+(defun rr--deepl-engine-ivy (from to txt)
+  "translate txt from language to language and put in the current
+buffer, use IVY to select candidate"
+  (let (lista)
+    (with-temp-buffer
+      (call-process "/home/rrybanie/tmp/translate-shell/translate" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" "Y" "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt )
+      (goto-char (point-min))
+      (let ((breakloop 0))
+	(while (= breakloop 0)
+	  ;;(message "%s" (buffer-substring-no-properties  (line-beginning-position) (line-end-position)))
+	  (setq lista (append lista (list
+				     (concat (buffer-substring-no-properties  (line-beginning-position) (line-end-position))
+					     ""))))
+	  (setq breakloop (forward-line 1)))))
+    (insert (ivy-read (format "Translation of: %s" "aa") lista))))
+
+
+;;; user ineteractive functnions
 (defun rr-google-translate (uarg)
   "translate txt and put in the current buffer"
   (interactive "P")
-  (rr--google-translate uarg "de" "pl"))
+  (rr--translate-sentence uarg (lambda (txt) (google-translate-translate "de" "pl" txt 'current-buffer))))
 
 (defun rr-google-translate-en (uarg)
   "translate txt and put in the current buffer"
   (interactive "P")
-  (rr--google-translate uarg "de" "en"))
+  (rr--translate-sentence uarg (lambda (txt) (google-translate-translate "de" "en" txt 'current-buffer))))
+
+(defun rr-deepl-translate (uarg)
+  "translate txt and put in the current buffer"
+  (interactive "P")
+  (rr--translate-sentence uarg (lambda (txt) (rr--deepl-engine-ivy "de" "pl" txt))))
 
 
 (defun rr--depl-lookup-word-gen-list (word)
@@ -185,6 +245,14 @@
 			  (kill-new selected)
 			  (message "copied to kill ring")))))
 
+(defun rr-cousel-depl-lookup-word-put-subheading (markstart markend)
+  "get dictionary result and put in org subheading"
+  (interactive "r")
+  (rr-counsel-depl-lookup-word markstart markend)
+  (rr--put-in-subheading (with-temp-buffer
+			  (yank)
+			  (buffer-substring-no-properties (point-min) (point-max)))))
+  
 ;; reverso context
 
 (defun rr--reverso-get-xml (word)
