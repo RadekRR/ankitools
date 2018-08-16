@@ -464,7 +464,12 @@ holding contextual information."
 	  (headstr (if (= level 1)
 		       "<cardseparator/>"
 		     "<fieldseparator/>"
-		       )))
+		     )))
+    (when (org-element-property :SUBMP3 headline)
+      (setq headstr (format "%s[sound:%s]" headstr (org-element-property :SUBMP3 headline))))
+    (when (org-element-property :SUBIMG headline)
+      (setq headstr (format "%s<img src=\"%s\"/>" headstr (org-element-property :SUBIMG headline))))
+
     (format "%s%s %s" headstr (org-export-data (org-element-property :title headline) info) (if contents
 												contents
 											      ""))))

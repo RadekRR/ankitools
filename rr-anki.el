@@ -168,6 +168,8 @@
 	  ;; we enter here only when uarg
 	  (goto-char markend)
 	  (when (> (length txt) 1)
+	    (org-insert-heading-respect-content)
+	    (org-toggle-heading)
 	    (insert (format "/%s/\n" txt))))))))
 
 
