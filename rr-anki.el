@@ -477,7 +477,7 @@ with universal argument always regenerate"
 
 (defun rr-org-next-h-in-subtree (level)
   (let ((heading-pos nil)
-	(subtree-ok t))
+	(subtree-ok nil))
     (save-excursion
       (while (and (not heading-pos)
 		  (= 0 (forward-line 1)))
@@ -487,7 +487,8 @@ with universal argument always regenerate"
 	  (setq subtree-ok nil))
 	(when (and  (org-at-heading-p)
 		    (= level (org-current-level)))
-	  (setq heading-pos (point)))))
+	  (setq heading-pos (point))
+	  (setq subtree-ok t))))
     (when subtree-ok
       (goto-char heading-pos))))
 
@@ -497,6 +498,19 @@ with universal argument always regenerate"
   (when  (rr-org-next-h 1)
     (rr-org-next-h 2)))
 
+(defun rr-org-set-ttt-lang-in-buffer ()
+  "set language for sections and firs subsection"
+  (interactive)
+  (save-excursion
+    (goto-char (point-min))
+    (while (rr-org-next-h-in-subtree 1)
+      (org-id-get-create)
+      (unless (cdar (org-entry-properties nil "TTSLANG"))
+	(org-set-property "TTSLANG" "de"))
+      (when (rr-org-next-h-in-subtree 2)
+	(org-id-get-create)
+	(unless (cdar (org-entry-properties nil "TTSLANG"))
+	  (org-set-property "TTSLANG" "pl"))))))
 
 (defun rr-org-genarate-tts-in-buffer ()
   "generate tts mp3s for the whole buffer"
@@ -509,38 +523,58 @@ with universal argument always regenerate"
 	    (tts-cnt-shdr 0)
 	    (tts-cnt 0))
 	(goto-char (point-min))
-	(while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
-			(incf cnt-hdr)
-			(when (cdar (org-entry-properties nil "TTSLANG"))
-			  (incf tts-cnt-hdr))
-			;; now find first subheading
-			(while (and (= 0 (forward-line 1))
-				    (not (org-at-heading-p))))
-			(if (and (org-at-heading-p) (= (org-current-level) 2))
-			    (progn
-			      (incf cnt-shdr)
-			      (when (cdar (org-entry-properties nil "TTSLANG"))
-				(incf tts-cnt-shdr)))
-			  (forward-line -1)))
-		      (= 0 (forward-line 1))))
+	(while (rr-org-next-h-in-subtree 1)
+	  (incf cnt-hdr)
+	  (when (cdar (org-entry-properties nil "TTSLANG"))
+	    (incf tts-cnt-hdr))
+	  (when (rr-org-next-h-in-subtree 2)
+	    (incf cnt-shdr)
+	    (when (cdar (org-entry-properties nil "TTSLANG"))
+	      (incf tts-cnt-shdr))))
 	(message "Headers: %d TTS: %d\nSubHeaders: %d TTS: %d" cnt-hdr tts-cnt-hdr cnt-shdr tts-cnt-shdr)
 	(goto-char (point-min))
-	(while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
-			(when (cdar (org-entry-properties nil "TTSLANG"))
-			  (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
-			  (rr-generate-tts))
-			;; now find first subheading
-			(while (and (= 0 (forward-line 1))
-				    (not (org-at-heading-p))))
-			(if (and (org-at-heading-p) (= (org-current-level) 2))
-			    (when (cdar (org-entry-properties nil "TTSLANG"))
-			      (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
-			      (rr-generate-tts))
-			  (forward-line -1)))
-		      (= 0 (forward-line 1))))
+	(while (rr-org-next-h-in-subtree 1)
+	  (when (cdar (org-entry-properties nil "TTSLANG"))
+	    (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+	    (rr-generate-tts))
+	  (when (rr-org-next-h-in-subtree 2)
+	    (when (cdar (org-entry-properties nil "TTSLANG"))
+	      (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+	      (rr-generate-tts))))
+	  
+	  
+	  ;; (while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
+	  ;; 		(incf cnt-hdr)
+	  ;; 		(when (cdar (org-entry-properties nil "TTSLANG"))
+	  ;; 		  (incf tts-cnt-hdr))
+	  ;; 		;; now find first subheading
+	  ;; 		(while (and (= 0 (forward-line 1))
+	  ;; 			    (not (org-at-heading-p))))
+	  ;; 		(if (and (org-at-heading-p) (= (org-current-level) 2))
+	  ;; 		    (progn
+	  ;; 		      (incf cnt-shdr)
+	  ;; 		      (when (cdar (org-entry-properties nil "TTSLANG"))
+	  ;; 			(incf tts-cnt-shdr)))
+	  ;; 		  (forward-line -1)))
+	  ;; 	      (= 0 (forward-line 1))))
+	  ;; (message "Headers: %d TTS: %d\nSubHeaders: %d TTS: %d" cnt-hdr tts-cnt-hdr cnt-shdr tts-cnt-shdr)
+	  ;; (goto-char (point-min))
+	  ;; (while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
+	  ;; 		(when (cdar (org-entry-properties nil "TTSLANG"))
+	  ;; 		  (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+	  ;; 		  (rr-generate-tts))
+	  ;; 		;; now find first subheading
+	  ;; 		(while (and (= 0 (forward-line 1))
+	  ;; 			    (not (org-at-heading-p))))
+	  ;; 		(if (and (org-at-heading-p) (= (org-current-level) 2))
+	  ;; 		    (when (cdar (org-entry-properties nil "TTSLANG"))
+	  ;; 		      (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+	  ;; 		      (rr-generate-tts))
+	  ;; 		  (forward-line -1)))
+	  ;; 	      (= 0 (forward-line 1))))
 
-	
-	))))
+	  
+	  ))))
 
 
 (defhydra hydra-rr-org ()

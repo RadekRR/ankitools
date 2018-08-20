@@ -730,7 +730,8 @@ info is a plist holding export options."
   than ask for saving the buffer"
   (save-excursion
     (goto-char (point-min))
-    (while (progn (when (org-at-heading-p)
+    (while (progn (when (and (org-at-heading-p)
+			     (cdar (org-entry-properties nil "TTSLANG")))
 		    (org-id-get-create))
 		  (= 0 (forward-line 1)))))
   (when (buffer-modified-p)
