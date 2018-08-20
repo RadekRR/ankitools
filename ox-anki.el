@@ -468,9 +468,9 @@ holding contextual information."
 		     ))
 	  (mediastr ""))
     
-    (when (and id (file-exists-p (concat "media/" id ".mp3")))
+    (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".mp3")))
       (setq mediastr (format "%s[sound:%s.mp3] " mediastr id)))
-    (when (and id (file-exists-p (concat "media/" id ".jpg")))
+    (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".jpg")))
       (setq mediastr (format "%s<img src=\"%s.jpg\"/> " mediastr id)))
     
     ;; (when (org-element-property :SUBMP3 headline)

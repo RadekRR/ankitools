@@ -1,0 +1,21 @@
+#!/usr/bin/emacs --script
+
+(require 'package)
+(package-initialize)
+(use-package google-translate)
+(require 'cl)
+(require 'rr-anki "/home/radek/.emacs.d/ankitools/rr-anki.el")
+;;(message "blek")
+;; (message "argv 0: %s" (elt argv 0)) ; %s is for string
+;; (message "argv 1: %s" (elt argv 1))
+;; (message "argv 2: %s" (elt argv 2))
+;; (message "argv 3: %s" (elt argv 3))
+
+(if (not (elt argv 0))
+    (message "Usage: org2tts filename")
+  (message "Generating TTS for file: %s" (elt argv 0)) ; %s is for string
+  (find-file-read-only (elt argv 0))
+  (rr-org-genarate-tts-in-buffer))
+
+    
+;;(message "argv 0: %s" (elt argv 0)) ; %s is for string

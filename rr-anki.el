@@ -132,6 +132,11 @@
 	  (insert "\n")))
       (insert (format "%s\n" txt)))))
 
+(defun rr--put-after-drawer (txt)
+  (while (and (= 0 (forward-line 1))
+	      (or (org-at-drawer-p) (org-at-property-p))))
+  (insert (format "%s\n" txt)))
+
 (defun rr--translate-sentence (uarg engine)
   "make engine to translate highlighted region or paragraph
    automaticaly put text below or copy to kill-buffer when ARG
@@ -170,15 +175,17 @@
 	  ;; we enter here only when uarg
 	  (goto-char markend)
 	  (when (> (length txt) 1)
-	    (let ((level (org-current-level)))
+	    (let ((level (org-current-level))
+		  (stars ""))
 	      ;; add new entry
-	      (while (and (= 0 (forward-line 1))
-			  (not (org-at-heading-p))))
+	      ;; (while (and (= 0 (forward-line 1))
+	      ;; 		  (not (org-at-heading-p))))
 	      (while (> level 0)
 		(decf level)
-		(insert "*"))
-	      (insert "* ")
-	      (insert (format "%s\n\n" txt))
+		(setq stars (concat stars "*")))
+	      (rr--put-after-drawer (concat stars "* " txt))
+	      ;;(insert "* ")
+	      ;;(insert (format "%s\n\n" txt))
 	      ;;(org-insert-heading-respect-content)
 	      ;;(org-toggle-heading)
 	      ;;(insert (format "/%s/\n" txt))
@@ -188,14 +195,14 @@
 (defun rr--deepl-engine (from to alternatives txt)
   "translate txt from language to language and put in the current
 buffer when alternatives(Y/n) show alternatives"
-  (call-process "/home/rrybanie/tmp/translate-shell/translate" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" alternatives "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt ))
+  (call-process "/usr/bin/trans" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" alternatives "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt ))
 
 (defun rr--deepl-engine-ivy (from to txt)
   "translate txt from language to language and put in the current
 buffer, use IVY to select candidate"
   (let (lista)
     (with-temp-buffer
-      (call-process "/home/rrybanie/tmp/translate-shell/translate" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" "Y" "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt )
+      (call-process "/usr/bin/trans" nil t nil (concat from ":" to ) "-e" "deepl" "-show-alternatives" "Y" "-show-original" "n" "-show-languages" "n" "-indent" "0" "-no-ansi" txt )
       (goto-char (point-min))
       (let ((breakloop 0))
 	(while (= breakloop 0)
@@ -269,11 +276,20 @@ buffer, use IVY to select candidate"
   
 ;; reverso context
 
-(defun rr--reverso-get-xml (word)
+(defun rr--reverso-get-xml (word lang)
   ;; connects with the reverso site, gets html and returns parsed xml
-  (with-temp-buffer
-    (url-insert-file-contents (format "http://context.reverso.net/translation/german-english/%s" word))
-    (libxml-parse-html-region (point-min) (point-max))))
+  (let ((strlang (cond ((or (equal lang "english")
+			    (equal lang "en"))
+			"english")
+		       ((or (equal lang "polish")
+			    (equal lang "pl"))
+			"polish")
+		       (t
+			nil))))
+       (when strlang
+	 (with-temp-buffer
+	   (url-insert-file-contents (format "http://context.reverso.net/translation/german-%s/%s" strlang word))
+	   (libxml-parse-html-region (point-min) (point-max))))))
 
 (defun rr--reverso-clean-text (lst)
   ;; get list of stings, combine and remove newlines and double spaces
@@ -312,18 +328,20 @@ buffer, use IVY to select candidate"
 	      (cddr lst))
     (list x)))
 
-(defun rr--reverso-prepare-candidates (word)
+(defun rr--reverso-prepare-candidates (word lang)
   ;; functnion takes word and prepares candidates list from reverso context
   
 
   ;; we have pairs so we have to group pairs and add newline in between
-  (let ((senlst (rr--reverso-process-xml (rr--reverso-get-xml word)))
+  (let ((senlst (rr--reverso-process-xml (rr--reverso-get-xml word lang)))
 	(candlst nil))
     (while senlst
       (push (format "%s\n/%s/" (pop senlst) (pop senlst)) candlst))
     candlst))
 
 
+(defvar rr-reverso-language "pl"
+  "language for reverso context")
 
 (defun rr-counsel-reverso-lookup-word (markstart markend)
   "generate list of text from the reverso net"
@@ -333,7 +351,7 @@ buffer, use IVY to select candidate"
       ;; we started with highlighted region
       (setq initword (buffer-substring-no-properties markstart markend)))
     (setq initword (read-from-minibuffer "Reverso context lookup: " initword))
-    (ivy-read "Select: "  (rr--reverso-prepare-candidates initword)
+    (ivy-read "Select: "  (rr--reverso-prepare-candidates initword rr-reverso-language)
 	      :caller 'rr-counsel-reverso-lookup-word
 	      :dynamic-collection nil
 	      :initial-input initword
@@ -349,7 +367,7 @@ buffer, use IVY to select candidate"
       ;; we started with highlighted region
       (setq initword (buffer-substring-no-properties markstart markend)))
     (setq initword (read-from-minibuffer "Reverso context lookup: " initword))
-    (ivy-read "Select: "  (rr--reverso-prepare-candidates initword)
+    (ivy-read "Select: "  (rr--reverso-prepare-candidates initword rr-reverso-language)
 	      :caller 'rr-counsel-reverso-lookup-word
 	      :dynamic-collection nil
 	      :initial-input initword
@@ -371,11 +389,12 @@ buffer, use IVY to select candidate"
       
 (defun rr--org-get-lang-for-tts ()
   "get the language for the speech synthesis based on attribute TTSLANG or level"
-  (let ((lang (or (cdar (org-entry-properties nil "TTSLANG"))
-		  (if (= (org-current-level) 1)
-		      "de"
-		    "pl"))))
-    lang))
+  (cdar (org-entry-properties nil "TTSLANG")))
+  ;; (let ((lang (or (cdar (org-entry-properties nil "TTSLANG"))
+  ;; 		  (if (= (org-current-level) 1)
+  ;; 		      "de"
+  ;; 		    "pl"))))
+  ;;   lang))
 
 
 (defun rr--get-paragraph-as-text ()
@@ -408,10 +427,17 @@ buffer, use IVY to select candidate"
   (let* ((txt (rr--get-paragraph-as-text))
 	 (id (org-id-get-create))
 	 (fname (concat id ".mp3"))
-	 (command (format "gtts-cli -l %s \"%s\" | mpv - --speed=1.35 -o media/%s" (rr--org-get-lang-for-tts) (substring-no-properties txt) fname)))
-    (when (buffer-file-name)
-      (unless (file-directory-p "media")
-	(make-directory "media"))
+	 (lang (rr--org-get-lang-for-tts))
+	 (speed (if (equal lang "pl")
+		    "1.5"
+		  "1.1"))
+	 (mediadir (rr-anki--media-dir (buffer-file-name)))
+;;	 (command (format "gtts-cli -l %s \"%s\" | mpv - --speed=%s -o %s/%s" lang (substring-no-properties txt) speed mediadir fname))
+	 (command (format "gtts-cli -l %s \"%s\" | ffmpeg -y -i - -filter:a \"atempo=%s\" -vn %s/%s" lang (substring-no-properties txt) speed mediadir fname)))
+    (when (and (buffer-file-name)
+	       lang)
+      (unless (file-directory-p mediadir)
+	(make-directory mediadir))
       (when (process-lines "/bin/bash" "-c" command)
 	fname))))
 
@@ -424,7 +450,7 @@ with universal argument always regenerate"
       (save-buffer)))
   (when (buffer-file-name)
     (when (or current-prefix-arg
-	      (not (file-exists-p (concat "media/" (org-id-get-create) ".mp3"))))
+	      (not (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" (org-id-get-create) ".mp3"))))
       (rr--generate-tts))))
 
 (defun rr-anki-play ()
@@ -434,28 +460,102 @@ with universal argument always regenerate"
     (when (y-or-n-p "You have to save the buffer first. Save it?")
       (save-buffer)))
   (when (buffer-file-name)
-    (let ((fname (concat "media/" (org-id-get-create) ".mp3")))
+    (let ((fname (concat (rr-anki--media-dir (buffer-file-name)) "/" (org-id-get-create) ".mp3")))
       (if (file-exists-p fname)
 	  (process-lines "/usr/bin/mpv" fname)
 	(message "File %s does not exist" fname)))))
     
 
 (defun rr-org-next-h (level)
-  (while (and (= 0 (forward-line 1))
-	      (or (not (org-at-heading-p))
-		  (/= level (org-current-level))))))
+  (let ((heading-found nil))
+    (while (and (not heading-found)
+		(= 0 (forward-line 1)))
+      (when (and  (org-at-heading-p)
+		  (= level (org-current-level)))
+	(setq heading-found t)))
+    heading-found))
+
+(defun rr-org-next-h-in-subtree (level)
+  (let ((heading-pos nil)
+	(subtree-ok t))
+    (save-excursion
+      (while (and (not heading-pos)
+		  (= 0 (forward-line 1)))
+	(when (and (org-at-heading-p)
+		   (> level (org-current-level)))
+	  (setq heading-pos (point))
+	  (setq subtree-ok nil))
+	(when (and  (org-at-heading-p)
+		    (= level (org-current-level)))
+	  (setq heading-pos (point)))))
+    (when subtree-ok
+      (goto-char heading-pos))))
+
+
 
 (defun rr-org-next-h2-after-h1 ()
-  (rr-org-next-h 1)
-  (rr-org-next-h 2))
+  (when  (rr-org-next-h 1)
+    (rr-org-next-h 2)))
 
 
-(provide 'rr-anki)
+(defun rr-org-genarate-tts-in-buffer ()
+  "generate tts mp3s for the whole buffer"
+  (if (not (buffer-file-name))
+      (message "Save buffer first!")
+    (save-excursion
+      (let ((cnt-hdr 0)
+	    (tts-cnt-hdr 0)
+	    (cnt-shdr 0)
+	    (tts-cnt-shdr 0)
+	    (tts-cnt 0))
+	(goto-char (point-min))
+	(while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
+			(incf cnt-hdr)
+			(when (cdar (org-entry-properties nil "TTSLANG"))
+			  (incf tts-cnt-hdr))
+			;; now find first subheading
+			(while (and (= 0 (forward-line 1))
+				    (not (org-at-heading-p))))
+			(if (and (org-at-heading-p) (= (org-current-level) 2))
+			    (progn
+			      (incf cnt-shdr)
+			      (when (cdar (org-entry-properties nil "TTSLANG"))
+				(incf tts-cnt-shdr)))
+			  (forward-line -1)))
+		      (= 0 (forward-line 1))))
+	(message "Headers: %d TTS: %d\nSubHeaders: %d TTS: %d" cnt-hdr tts-cnt-hdr cnt-shdr tts-cnt-shdr)
+	(goto-char (point-min))
+	(while (progn (when (and (org-at-heading-p) (= (org-current-level) 1))
+			(when (cdar (org-entry-properties nil "TTSLANG"))
+			  (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+			  (rr-generate-tts))
+			;; now find first subheading
+			(while (and (= 0 (forward-line 1))
+				    (not (org-at-heading-p))))
+			(if (and (org-at-heading-p) (= (org-current-level) 2))
+			    (when (cdar (org-entry-properties nil "TTSLANG"))
+			      (message "Generating TTS %d/%d" (incf tts-cnt) (+ tts-cnt-hdr tts-cnt-shdr))
+			      (rr-generate-tts))
+			  (forward-line -1)))
+		      (= 0 (forward-line 1))))
 
+	
+	))))
 
 
 (defhydra hydra-rr-org ()
   "RR Anki org"
   ("n" (rr-org-next-h2-after-h1) "next h2 after h1")
-  ("o" (org-set-property "TTSLANG" "pl") "set TTS pl")
-  ("e" (org-set-property "TTSLANG" "en") "set TTS en")) 
+  ("N" (rr-org-next-h 1) "next h1")
+  ("d" (progn (org-set-property "TTSLANG" "de") (org-id-get-create)) "set TTS de")
+  ("o" (progn (org-set-property "TTSLANG" "pl") (org-id-get-create)) "set TTS pl")
+  ("e" (progn (org-set-property "TTSLANG" "en") (org-id-get-create)) "set TTS en")) 
+
+
+(defun rr-anki--media-dir (bufname)
+  "Get the directory name from the base file"
+  (when bufname
+    (setq bufname (replace-regexp-in-string "\\([[:print:]]+\\)\\.org" "\\1.media" bufname))))
+
+
+(provide 'rr-anki)

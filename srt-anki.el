@@ -135,19 +135,19 @@ jest twój stary mistrz.
 (defun srt--anki-gen-audio (infile outfile start end)
   "generate audio clip from the infile with start and stop and save in outfile"
   (when (buffer-file-name)
-    (unless (file-directory-p "media")
-      (make-directory "media"))
+    (unless (file-directory-p (rr-anki--media-dir (buffer-file-name)))
+      (make-directory (rr-anki--media-dir (buffer-file-name))))
     (when (process-lines "/usr/bin/mpv" "--vid=no" infile (format "--start=%f" start) (format "--end=%f" end)
-			 "-o" (format "media/%s" outfile))
+			 "-o" (format "%s/%s" (rr-anki--media-dir (buffer-file-name)) outfile))
       outfile)))
 
 (defun srt--anki-gen-screenshot (infile outfile start end)
   "generate audio clip from the infile with start and stop and save in outfile"
   (when (buffer-file-name)
-    (unless (file-directory-p "media")
-      (make-directory "media"))
+    (unless (file-directory-p (rr-anki--media-dir (buffer-file-name)))
+      (make-directory (rr-anki--media-dir (buffer-file-name))))
     (when (process-lines "/usr/bin/mpv" "--aid=no" infile (format "--start=%f" start) (format "--length=%f" 0.03) "--of=singlejpeg" "--sub=no" "--vf=scale=250:120"
-			 "-o" (format "media/%s" outfile))
+			 "-o" (format "%s/%s" (rr-anki--media-dir (buffer-file-name)) outfile))
       outfile)))
 
 (defun rr-generate-audio-srt ()
@@ -163,7 +163,7 @@ with universal argument always regenerate"
 	  (start (string-to-number (cdar (org-entry-properties nil "SUBSTART"))))
 	  (end (string-to-number (cdar (org-entry-properties nil "SUBEND")))))
     (when (or current-prefix-arg
-	      (not (file-exists-p (concat "media/" outfile))))
+	      (not (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" outfile))))
       (srt--anki-gen-audio infile outfile start end)))))
 
 (defun rr-generate-screenshot-srt ()
@@ -179,7 +179,7 @@ with universal argument always regenerate"
 	  (start (string-to-number (cdar (org-entry-properties nil "SUBSTART"))))
 	  (end (string-to-number (cdar (org-entry-properties nil "SUBEND")))))
       (when (or current-prefix-arg
-		(not (file-exists-p (concat "media/" outfile))))
+		(not (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" outfile))))
 	(srt--anki-gen-screenshot infile outfile start end)))))
 
 
