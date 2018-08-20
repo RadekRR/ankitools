@@ -17,7 +17,7 @@
 
 (eval-when-compile (require 'cl-lib))
 (require 'ox-html)
-(require 'f)
+;;(require 'f)
 
 (defvar org-anki-path
   (file-name-directory (or load-file-name (buffer-file-name)))
@@ -460,17 +460,26 @@ Else use org-html-src-block to convert source block to html."
   "Transcode a HEADLINE element from Org to Google I/O slides.
 CONTENTS holds the contents of the headline. INFO is a plist
 holding contextual information."
-  (let*  ((level (org-export-get-relative-level headline info))
+  (let*  ((id (org-element-property :ID headline))
+	  (level (org-export-get-relative-level headline info))
 	  (headstr (if (= level 1)
-		       "<cardseparator/>"
+		       (concat "<cardseparator/>" id "<fieldseparator/>")
 		     "<fieldseparator/>"
-		     )))
-    (when (org-element-property :SUBMP3 headline)
-      (setq headstr (format "%s[sound:%s]" headstr (org-element-property :SUBMP3 headline))))
-    (when (org-element-property :SUBIMG headline)
-      (setq headstr (format "%s<img src=\"%s\"/>" headstr (org-element-property :SUBIMG headline))))
+		     ))
+	  (mediastr ""))
+    
+    (when (and id (file-exists-p (concat "media/" id ".mp3")))
+      (setq mediastr (format "%s[sound:%s.mp3] " mediastr id)))
+    (when (and id (file-exists-p (concat "media/" id ".jpg")))
+      (setq mediastr (format "%s<img src=\"%s.jpg\"/> " mediastr id)))
+    
+    ;; (when (org-element-property :SUBMP3 headline)
+    ;;   (setq mediastr (format "%s[sound:%s] " mediastr (org-element-property :SUBMP3 headline))))
+    ;; (when (org-element-property :SUBIMG headline)
+    ;;   (setq mediastr (format "%s<img src=\"%s\"/> " mediastr (org-element-property :SUBIMG headline))))
 
-    (format "%s%s %s" headstr (org-export-data (org-element-property :title headline) info) (if contents
+    (setq mediastr (concat mediastr "<fieldseparator/>"))
+    (format "%s%s%s%s" headstr mediastr (org-export-data (org-element-property :title headline) info) (if contents
 												contents
 											      ""))))
     
@@ -716,7 +725,21 @@ info is a plist holding export options."
 
 ;;; End-user functions
 ;;;###autoload
-
+(defun org-anki-make-ids ()
+  "this function make ids for all oft the headlines in buffer and
+  than ask for saving the buffer"
+  (save-excursion
+    (goto-char (point-min))
+    (while (progn (when (org-at-heading-p)
+		    (org-id-get-create))
+		  (= 0 (forward-line 1)))))
+  (when (buffer-modified-p)
+    (when (y-or-n-p "Added IDs, save the buffer?")
+      (save-buffer))))
+      
+      
+      
+  
 (defun org-anki-align-tabs (outbuf)
   ;; this will balance tabs in each line by adding tabs in the end so
   ;; that each line will have the same number of tabs
@@ -747,6 +770,7 @@ info is a plist holding export options."
 (defun org-anki-export-as-csv
     (&optional async subtreep visible-only body-only ext-plist)
   (interactive)
+  (org-anki-make-ids)
   (let ((outbuf (org-export-to-buffer 'anki "*Org Anki Export*"
 		  async subtreep visible-only body-only ext-plist )))
     ;; add tabs
@@ -782,6 +806,7 @@ info is a plist holding export options."
     (&optional async subtreep visible-only body-only ext-plist)
   "Export current buffer to CSV file"
   (interactive)
+  (org-anki-make-ids)
   (let* ((extension (concat "." "txt"))
          (file (org-export-output-file-name extension subtreep))
          (org-export-coding-system org-html-coding-system)

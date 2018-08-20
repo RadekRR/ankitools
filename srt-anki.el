@@ -49,7 +49,7 @@ jest twój stary mistrz.
 
 
 
-(setq yy (srt-anki--parse-file "/home/rrybanie/.emacs.d/ankitools/blee.srt"))
+;;(setq yy (srt-anki--parse-file "/home/rrybanie/.emacs.d/ankitools/blee.srt"))
 
 
 (defun srt-anki--get-sub-from-time-txt (srtdb time)
@@ -86,11 +86,13 @@ jest twój stary mistrz.
 
 (defun srt-anki-produce-from-file (fname)
   "parse MPV resulst file and produce org file"
+  (interactive "fEnter MPV output name: ") 
   (with-temp-buffer
     (insert-file-contents fname)
     (goto-char (point-min))
     (with-current-buffer (get-buffer-create "srt-anki-buf.org")
-      (erase-buffer))
+      (erase-buffer)
+      (insert "#+MACRO: BR @@html:<br>@@\n\n"))
     (when (re-search-forward "Playing: \\([[:print:]]+\\)" nil t)
       (let ((mediafile (match-string 1)))
 	(when (re-search-forward "Subs.*?'\\([[:print:]]+.srt\\)'" nil t)
@@ -101,18 +103,90 @@ jest twój stary mistrz.
 		     (srtstring (plist-get elt 'substr))
 		     (srtstart (plist-get elt 'tstart))
 		     (srtend (plist-get elt 'tend)))
-		(message "%s" srtstring)
+		;; remove newlines and change to <br>
+		(setq srtstring (replace-regexp-in-string "\n" "{{{BR}}}" srtstring))
+		(setq srtstring (replace-regexp-in-string "<b>[ ]*" "*" srtstring))
+		(setq srtstring (replace-regexp-in-string "</b>[ ]*" "*" srtstring))
+		(setq srtstring (replace-regexp-in-string "<i>[ ]*" "/" srtstring))
+		(setq srtstring (replace-regexp-in-string "</i>[ ]*" "/" srtstring))
 		(with-current-buffer (get-buffer-create "srt-anki-buf.org")
+		  ;;(org-mode)
 		  (insert (format "* %s\n" srtstring))
+		  (org-id-get-create)
 		  (org-set-property "SUBFILE" subfile)
+		  (org-set-property "VIDFILE" mediafile)
 		  (org-set-property "SUBSTART" (number-to-string srtstart))
-		  (org-set-property "SUBEND" (number-to-string srtend))
-		  (org-set-property "SUBMP3" (srt--anki-gen-audio mediafile srtstart srtend))
-		  (org-set-property "SUBIMG" (srt--anki-gen-img mediafile srtstart srtend)))))))))))
+		  (org-set-property "SUBEND" (number-to-string srtend)))))))))))
 
     
-    
-(setq lista nil)
-(setq listb '(a b c))
+(defun srt-anki--play (fname start end)
+  (if (file-exists-p fname)
+      (process-lines "/usr/bin/mpv" "--geometry=640"  fname (format "--start=%f" start) (format "--ab-loop-a=%f" start) (format "--ab-loop-b=%f" end))
+    (message "File %s does not exist" fname)))
+
+(defun srt-anki-play ()
+  "play video based on srt entry"
+  (interactive)
+  (let ((fname (cdar (org-entry-properties nil "VIDFILE")))
+	(start (string-to-number (cdar (org-entry-properties nil "SUBSTART"))))
+	(end (string-to-number (cdar (org-entry-properties nil "SUBEND")))))
+    (srt-anki--play fname start end)))
+
+(defun srt--anki-gen-audio (infile outfile start end)
+  "generate audio clip from the infile with start and stop and save in outfile"
+  (when (buffer-file-name)
+    (unless (file-directory-p "media")
+      (make-directory "media"))
+    (when (process-lines "/usr/bin/mpv" "--vid=no" infile (format "--start=%f" start) (format "--end=%f" end)
+			 "-o" (format "media/%s" outfile))
+      outfile)))
+
+(defun srt--anki-gen-screenshot (infile outfile start end)
+  "generate audio clip from the infile with start and stop and save in outfile"
+  (when (buffer-file-name)
+    (unless (file-directory-p "media")
+      (make-directory "media"))
+    (when (process-lines "/usr/bin/mpv" "--aid=no" infile (format "--start=%f" start) (format "--length=%f" 0.03) "--of=singlejpeg" "--sub=no" "--vf=scale=250:120"
+			 "-o" (format "media/%s" outfile))
+      outfile)))
+
+(defun rr-generate-audio-srt ()
+  "generate audio from for current heading, if not already generated,
+with universal argument always regenerate"
+  (interactive)
+  (unless (buffer-file-name)
+    (when (y-or-n-p ("You have to save the buffer first. Save it?"))
+      (save-buffer)))
+  (when (buffer-file-name)
+    (let ((infile (cdar (org-entry-properties nil "VIDFILE")))
+	  (outfile (concat  (org-id-get-create) ".mp3"))
+	  (start (string-to-number (cdar (org-entry-properties nil "SUBSTART"))))
+	  (end (string-to-number (cdar (org-entry-properties nil "SUBEND")))))
+    (when (or current-prefix-arg
+	      (not (file-exists-p (concat "media/" outfile))))
+      (srt--anki-gen-audio infile outfile start end)))))
+
+(defun rr-generate-screenshot-srt ()
+  "generate audio from for current heading, if not already generated,
+with universal argument always regenerate"
+  (interactive)
+  (unless (buffer-file-name)
+    (when (y-or-n-p ("You have to save the buffer first. Save it?"))
+      (save-buffer)))
+  (when (buffer-file-name)
+    (let ((infile (cdar (org-entry-properties nil "VIDFILE")))
+	  (outfile (concat  (org-id-get-create) ".jpg"))
+	  (start (string-to-number (cdar (org-entry-properties nil "SUBSTART"))))
+	  (end (string-to-number (cdar (org-entry-properties nil "SUBEND")))))
+      (when (or current-prefix-arg
+		(not (file-exists-p (concat "media/" outfile))))
+	(srt--anki-gen-screenshot infile outfile start end)))))
 
 
+;; (setq teststring "blek
+;; newline")
+
+;; (re)
+
+;; (replace-regexp-in-string "\n" "<br>" teststring)
+      

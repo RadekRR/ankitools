@@ -33,19 +33,21 @@
   ;; and check if there is following paraphraph
   ;; if there is paragraph we will use end position of the paragraph as END
   (save-excursion
-    (let ((bds (bounds-of-thing-at-point 'paragraph)))
-      (if bds
-	  (progn
-	    (forward-line -1)
-	    (cons (if (bounds-of-thing-at-point 'paragraph)
-		      (car bds)
-		    (car (bounds-of-thing-at-point 'line))) (cdr bds)))
-	;; else
-	(setq bds (bounds-of-thing-at-point 'line))
-	(forward-line)
-	(cons (car bds) (if (bounds-of-thing-at-point 'paragraph)
-			    (cdr (bounds-of-thing-at-point 'paragraph))
-			  (cdr bds)))))))
+    (if (org-at-heading-p)
+	(bounds-of-thing-at-point 'line)
+      (let ((bds (bounds-of-thing-at-point 'paragraph)))
+	(if bds
+	    (progn
+	      (forward-line -1)
+	      (cons (if (bounds-of-thing-at-point 'paragraph)
+			(car bds)
+		      (car (bounds-of-thing-at-point 'line))) (cdr bds)))
+	  ;; else
+	  (setq bds (bounds-of-thing-at-point 'line))
+	  (forward-line)
+	  (cons (car bds) (if (bounds-of-thing-at-point 'paragraph)
+			      (cdr (bounds-of-thing-at-point 'paragraph))
+			    (cdr bds))))))))
 
 ;;; cloze creation
 (defun rr-transform-to-cloze (uarg)
@@ -140,7 +142,7 @@
     (if (use-region-p)
 	(setq markstart (region-beginning) markend (region-end))
       (setq bds (rr--my-paragraph-bound))
-      (setq markstart (car bds) markend (cdr bds)))
+      (setq markstart (car bds) markend (- (cdr bds) 1)))
     (when (and markstart markend)
       (let ((txt (buffer-substring markstart markend)))
 	(when (with-temp-buffer
@@ -168,9 +170,19 @@
 	  ;; we enter here only when uarg
 	  (goto-char markend)
 	  (when (> (length txt) 1)
-	    (org-insert-heading-respect-content)
-	    (org-toggle-heading)
-	    (insert (format "/%s/\n" txt))))))))
+	    (let ((level (org-current-level)))
+	      ;; add new entry
+	      (while (and (= 0 (forward-line 1))
+			  (not (org-at-heading-p))))
+	      (while (> level 0)
+		(decf level)
+		(insert "*"))
+	      (insert "* ")
+	      (insert (format "%s\n\n" txt))
+	      ;;(org-insert-heading-respect-content)
+	      ;;(org-toggle-heading)
+	      ;;(insert (format "/%s/\n" txt))
+	      )))))))
 
 
 (defun rr--deepl-engine (from to alternatives txt)
@@ -218,7 +230,7 @@ buffer, use IVY to select candidate"
   ;; (erase-buffer)
   (when (> (length word) 3)
     (with-temp-buffer
-      (call-process "grep" nil t nil word "/home/rrybanie/depl.xml" "-i")
+      (call-process "grep" nil t nil word (concat (getenv "HOME") "/" "depl.xml") "-i")
       (goto-char (point-min))
       (let ((breakloop 0)
 	    (lista nil))
@@ -328,4 +340,122 @@ buffer, use IVY to select candidate"
 	      :action #'(lambda (selected)
 			  (kill-new selected)
 			  (message "copied to kill ring")))))
+
+(defun rr-org-counsel-reverso-lookup-word (markstart markend)
+  "generate list of text from the reverso net"
+  (interactive "r")
+  (let ((initword (word-at-point)))
+    (when (use-region-p)
+      ;; we started with highlighted region
+      (setq initword (buffer-substring-no-properties markstart markend)))
+    (setq initword (read-from-minibuffer "Reverso context lookup: " initword))
+    (ivy-read "Select: "  (rr--reverso-prepare-candidates initword)
+	      :caller 'rr-counsel-reverso-lookup-word
+	      :dynamic-collection nil
+	      :initial-input initword
+	      :action #'(lambda (selected)
+			  (kill-new (replace-regexp-in-string
+				     "\\([[:print:]]*\\)\n/\\([[:print:]]*\\)/" "* \\1 \n\n** \\2 " selected))
+			  (message "copied to kill ring")))))
+
+
+(defun rr-org-put-ids ()
+  "generate ids in the buffer for all sub*sections"
+  (interactive)
+  (save-excursion
+    (goto-char (point-min))
+    (while (progn
+	     (when (org-at-heading-p)
+	       (org-id-get-create))
+	     (= 0 (forward-line 1))))))
+      
+(defun rr--org-get-lang-for-tts ()
+  "get the language for the speech synthesis based on attribute TTSLANG or level"
+  (let ((lang (or (cdar (org-entry-properties nil "TTSLANG"))
+		  (if (= (org-current-level) 1)
+		      "de"
+		    "pl"))))
+    lang))
+
+
+(defun rr--get-paragraph-as-text ()
+  "get text for current paragraph or marked region, remove tags"
+  ;;(message "%s" current-prefix-arg)
+  (let (markstart markend bds)
+    (if (use-region-p)
+	(setq markstart (region-beginning) markend (region-end))
+      (setq bds (rr--my-paragraph-bound))
+      (setq markstart (car bds) markend (cdr bds)))
+    (when (and markstart markend)
+      (let ((txt (buffer-substring markstart markend)))
+	(with-temp-buffer
+	  (insert txt)
+	  (goto-char (point-min))
+	  (while (re-search-forward "\\(<field/>\\)\\|\\(<card/>\\)\\|\n" nil 1)
+	    (replace-match ""))
+	  (goto-char (point-min))
+	  (while (re-search-forward "{{c[0-9]+::\\(.+?\\)\\(::.*?}}\\)\\|\\(}}\\)" nil 1)
+	    (replace-match "\\1"))
+	  (goto-char (point-min))
+	  (while (re-search-forward "^\\*" nil 1)
+	    (replace-match ""))
+	  ;; return txt
+	  (setq txt (buffer-substring (point-min) (point-max))))))))
+
+
+(defun rr--generate-tts ()
+  "generate tts for current heading"
+  (let* ((txt (rr--get-paragraph-as-text))
+	 (id (org-id-get-create))
+	 (fname (concat id ".mp3"))
+	 (command (format "gtts-cli -l %s \"%s\" | mpv - --speed=1.35 -o media/%s" (rr--org-get-lang-for-tts) (substring-no-properties txt) fname)))
+    (when (buffer-file-name)
+      (unless (file-directory-p "media")
+	(make-directory "media"))
+      (when (process-lines "/bin/bash" "-c" command)
+	fname))))
+
+(defun rr-generate-tts ()
+  "generate tts for current heading, if not already generated,
+with universal argument always regenerate"
+  (interactive)
+  (unless (buffer-file-name)
+    (when (y-or-n-p ("You have to save the buffer first. Save it?"))
+      (save-buffer)))
+  (when (buffer-file-name)
+    (when (or current-prefix-arg
+	      (not (file-exists-p (concat "media/" (org-id-get-create) ".mp3"))))
+      (rr--generate-tts))))
+
+(defun rr-anki-play ()
+  "play current mp3 based on ID"
+  (interactive)
+  (unless (buffer-file-name)
+    (when (y-or-n-p "You have to save the buffer first. Save it?")
+      (save-buffer)))
+  (when (buffer-file-name)
+    (let ((fname (concat "media/" (org-id-get-create) ".mp3")))
+      (if (file-exists-p fname)
+	  (process-lines "/usr/bin/mpv" fname)
+	(message "File %s does not exist" fname)))))
+    
+
+(defun rr-org-next-h (level)
+  (while (and (= 0 (forward-line 1))
+	      (or (not (org-at-heading-p))
+		  (/= level (org-current-level))))))
+
+(defun rr-org-next-h2-after-h1 ()
+  (rr-org-next-h 1)
+  (rr-org-next-h 2))
+
+
 (provide 'rr-anki)
+
+
+
+(defhydra hydra-rr-org ()
+  "RR Anki org"
+  ("n" (rr-org-next-h2-after-h1) "next h2 after h1")
+  ("o" (org-set-property "TTSLANG" "pl") "set TTS pl")
+  ("e" (org-set-property "TTSLANG" "en") "set TTS en")) 
