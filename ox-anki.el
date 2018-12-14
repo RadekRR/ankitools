@@ -52,8 +52,8 @@ vertical slides."
   
   :menu-entry
   '(?i "Export to Aanki"
-       ((?H "As CSV buffer" org-anki-export-as-csv)
-        (?h "As CSV file" org-anki-export-to-csv))
+       ((?I "As CSV buffer" org-anki-export-as-csv)
+        (?i "As CSV file" org-anki-export-to-csv))
        (?o "As CSV file and open"
            (lambda (a s v b)
              (if a (org-anki-export-to-csv t s v b)
@@ -63,6 +63,8 @@ vertical slides."
 
   :options-alist
   '(
+    (:srt-mode "SRT_MODE" nil nil t)
+    (:srt-prefix "SRT_PREFIX" nil nil t)
     ;; Overwrite the HTML_HEAD defined in ox-html.el
     ;;(:html-head "HTML_HEAD" nil "" newline)
 
@@ -455,119 +457,77 @@ Else use org-html-src-block to convert source block to html."
                ) user-id))))
 
 ;;;; headline
+(setq iinfo nil)
+(setq nprevhead nil)
+(setq nprevtrans nil)
+(setq nprevelt nil)
 
 (defun org-anki-headline (headline contents info)
   "Transcode a HEADLINE element from Org to Google I/O slides.
 CONTENTS holds the contents of the headline. INFO is a plist
 holding contextual information."
-  (let*  ((id (org-element-property :ID headline))
-	  (level (org-export-get-relative-level headline info))
-	  (headstr (if (= level 1)
-		       (concat "<cardseparator/>" id "<fieldseparator/>")
-		     "<fieldseparator/>"
-		     ))
-	  (mediastr ""))
+  (let ((level  (org-export-get-relative-level headline info)))
+    (when (= level 1)
+      (let*  ((id (org-element-property :ID headline))
+              (prevelt (org-export-get-previous-element headline info))
+              (nextelt (org-export-get-next-element headline info))
+              (prevhead (org-export-data (org-element-property :title prevelt) info))
+              (prevtrans (org-export-data (org-element-property :title (nth 3 prevelt)) info))
+              (nexthead (org-export-data (org-element-property :title nextelt) info))
+              (nexttrans (org-export-data (org-element-property :title (nth 3 nextelt)) info))
+              (headhead (org-export-data (org-element-property :title headline) info))
+              (headtrans (org-export-data (org-element-property :title (nth 3 headline)) info))
+	          ;(mediastr "")
+              (srt-prefix (concat (plist-get info :srt-prefix) "-")))
+        
+        ;; (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".mp3")))
+        ;;   (setq mediastr (format "%s[sound:%s.mp3] " mediastr id)))
+        ;; (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".jpg")))
+        ;;   (setq mediastr (format "%s<img src=\"%s.jpg\"/> " mediastr id)))
+        
+        (setq iinfo info)
+        (setq nprevhead prevhead) 
+        (setq nprevtrans prevtrans)
+        (setq nprevelt prevelt)
+        (concat (format "%s%s<fieldseparator/>" srt-prefix id)  ;; seq
+                (format "%s<fieldseparator/>" "0") ;; time
+                (format "[sound:%s%s.mp3]<fieldseparator/>" srt-prefix id) ;; audio
+                (format "<img src=\"%s%s.jpg\"><fieldseparator/>" srt-prefix id) ;; snapshot
+                (format "%s<fieldseparator/>" headhead) ;; expression
+                (format "%s<fieldseparator/>" headtrans) ;;meaning
+                (format "%s<fieldseparator/>%s<fieldseparator/>" prevhead prevtrans) ;; leading expression leading meaning
+                (format "%s<fieldseparator/>%s<cardseparator/>" nexthead nexttrans) ;; trailing expression trailng meaning
+                )))))
+;; (concat (format "%s<fieldseparator/>" id)
+;;         (format "%s<fieldseparator/>" mediastr)
+;;         (format "%s<fieldseparator/>" headhead)
+;;         (format "%s<fieldseparator/>" headtrans)
+;;         (format "%s<fieldseparator/>%s<fieldseparator/>" nexthead nexttrans)
+;;         (format "%s<fieldseparator/>%s<cardseparator/>" prevhead prevtrans)
+;;         )))))
+
+;; (defun org-anki-headline (headline contents info)
+;;   "Transcode a HEADLINE element from Org to Google I/O slides.
+;; CONTENTS holds the contents of the headline. INFO is a plist
+;; holding contextual information."
+;;   (let*  ((id (org-element-property :ID headline))
+;; 	  (level (org-export-get-relative-level headline info))
+;; 	  (headstr (if (= level 1)
+;; 		       (concat "<cardseparator/>" id "<fieldseparator/>")
+;; 		     "<fieldseparator/>"
+;; 		     ))
+;; 	  (mediastr ""))
     
-    (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".mp3")))
-      (setq mediastr (format "%s[sound:%s.mp3] " mediastr id)))
-    (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".jpg")))
-      (setq mediastr (format "%s<img src=\"%s.jpg\"/> " mediastr id)))
+;;     (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".mp3")))
+;;       (setq mediastr (format "%s[sound:%s.mp3] " mediastr id)))
+;;     (when (and id (file-exists-p (concat (rr-anki--media-dir (buffer-file-name)) "/" id ".jpg")))
+;;       (setq mediastr (format "%s<img src=\"%s.jpg\"/> " mediastr id)))
     
-    ;; (when (org-element-property :SUBMP3 headline)
-    ;;   (setq mediastr (format "%s[sound:%s] " mediastr (org-element-property :SUBMP3 headline))))
-    ;; (when (org-element-property :SUBIMG headline)
-    ;;   (setq mediastr (format "%s<img src=\"%s\"/> " mediastr (org-element-property :SUBIMG headline))))
-
-    (setq mediastr (concat mediastr "<fieldseparator/>"))
-    (format "%s%s%s%s" headstr mediastr (org-export-data (org-element-property :title headline) info) (if contents
-												contents
-											      ""))))
+;;     (setq mediastr (concat mediastr "<fieldseparator/>"))
+;;     (format "%s%s%s%s" headstr mediastr (org-export-data (org-element-property :title headline) info) (if contents
+;; 												contents
+;; 											      ""))))
     
-
-;;  (org-export-data (org-element-property :title headline) info))
-  ;; (if (/= 1 (org-export-get-relative-level headline info))
-  ;;   (format "<blek level %d>%s</blek>%s"
-  ;; 	    (org-export-get-relative-level headline info)
-  ;; 	    (org-export-data (org-element-property :title headline) info)
-  ;; 	    contents)
-  ;;   ))
-
-  ;; ;; First call org-html-headline to get the formatted HTML contents.
-  ;; ;; Then add enclosing <article> tags to mark slides.
-  ;; (setq contents (or contents ""))
-  ;; (let* ((numberedp (org-export-numbered-headline-p headline info))
-  ;;        (level (org-export-get-relative-level headline info))
-  ;;        (text (org-export-data (org-element-property :title headline) info))
-  ;;        (todo (and (plist-get info :with-todo-keywords)
-  ;;                   (let ((todo (org-element-property :todo-keyword headline)))
-  ;;                     (and todo (org-export-data todo info)))))
-  ;;        (todo-type (and todo (org-element-property :todo-type headline)))
-  ;;        (tags (and (plist-get info :with-tags)
-  ;;                   (org-export-get-tags headline info)))
-  ;;        (priority (and (plist-get info :with-priority)
-  ;;                       (org-element-property :priority headline)))
-  ;;        ;; Create the headline text.
-  ;;        (full-text (if (fboundp 'org-html-format-headline--wrap)
-  ;;                       (org-html-format-headline--wrap headline info)
-  ;;                     (org-html-headline headline "" info))))
-  ;;   (cond
-  ;;    ;; Case 1: This is a footnote section: ignore it.
-  ;;    ((org-element-property :footnote-section-p headline) nil)
-  ;;    ;; Case 2. This is a deep sub-tree: export it as a list item.
-  ;;    ;;         Also export as items headlines for which no section
-  ;;    ;;         format has been found.
-  ;;    ((org-export-low-level-p headline info)
-  ;;     ;; Build the real contents of the sub-tree.
-  ;;     (let* ((type (if numberedp 'ordered 'unordered))
-  ;;            (itemized-body (org-html-format-list-item
-  ;;                            contents type nil info nil full-text)))
-  ;;       (concat
-  ;;        (and (org-export-first-sibling-p headline info)
-  ;;             (org-anki-begin-plain-list type))
-  ;;        itemized-body
-  ;;        (and (org-export-last-sibling-p headline info)
-  ;;             (org-anki-end-plain-list type)))))
-
-  ;;    ;; Case 3. Standard headline.  Export it as a section.
-  ;;    (t
-  ;;     (let* ((section-number (mapconcat 'number-to-string
-  ;;                                       (org-export-get-headline-number
-  ;;                                        headline info) "-"))
-  ;;            (ids (remove 'nil
-  ;;                         (list (org-element-property :CUSTOM_ID headline)
-  ;;                               (concat "sec-" section-number)
-  ;;                               (org-element-property :ID headline))))
-  ;;            (level1 (+ level (1- org-html-toplevel-hlevel)))
-  ;;            (hlevel (org-anki-get-hlevel info))
-  ;;            (first-content (car (org-element-contents headline))))
-  ;;       (concat
-
-  ;;        ;; Stop previous slide.
-  ;;        ;; FIXME: This will make slide has more </slide> element
-  ;;        (if (or (/= level 1)
-  ;;                (not (org-export-first-sibling-p headline info)))
-  ;;            "</slide>\n")
-
-  ;;        (org-anki-close-element
-  ;;         (org-anki--container headline info)
-  ;;         ;; container class
-  ;;         (org-anki--container-class headline info)
-  ;;         ;; body
-  ;;         (format "%s%s%s"
-  ;;                 ;; aside
-  ;;                 (org-anki--aside headline info)
-  ;;                 ;; title
-  ;;                 (org-anki--title headline info)
-
-  ;;                 ;; When there is no section, pretend there is an empty
-  ;;                 ;; one to get the correct <div class="outline- ...>
-  ;;                 ;; which is needed by `org-info.js'.
-  ;;                 (if (not (eq (org-element-type first-content) 'section))
-  ;;                     (concat (org-html-section first-content "" info)
-  ;;                             "")
-  ;;                   contents)
-  ;;                 ))
-  ;;        ))))))
 
 (defun org-anki-section (section contents info)
   "Transcode a SECTION element from Org to HTML.
@@ -708,6 +668,9 @@ contextual information."
 contents is the transoded contents string.
 info is a plist holding export options."
 
+  (let ((srtmode (plist-get info :srt-mode)))
+    (message (format "SRT_MODE: %s" srtmode)))
+
   ;; Slide contents
   (let* ((ret (replace-regexp-in-string "[\n\t]+" " " contents))
 	 (ret (replace-regexp-in-string "<cardseparator/>" "\n" ret))
@@ -808,7 +771,7 @@ info is a plist holding export options."
   "Export current buffer to CSV file"
   (interactive)
   (org-anki-make-ids)
-  (let* ((extension (concat "." "txt"))
+  (let* ((extension (concat "." "csv"))
          (file (org-export-output-file-name extension subtreep))
          (org-export-coding-system org-html-coding-system)
 	 (file (read-file-name "file name: " nil file nil file)))

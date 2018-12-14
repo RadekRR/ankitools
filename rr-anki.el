@@ -1,29 +1,45 @@
 (require 'google-translate)
 
+(defvar rr-anki-tag "")
+(make-variable-buffer-local 'rr-anki-tag)
+(put 'rr-anki-tag 'safe-local-variable #'(lambda (_) t))
+(defvar rr-anki-input-media "")
+(make-variable-buffer-local 'rr-anki-input-media)
+(put 'rr-anki-input-media 'safe-local-variable #'(lambda (_) t))
+
+
 (setq rr--cloze-hide-char ?_)
+(setq rr--cloze-hide-table '("aus" "der" "die" "das" "des" "den" "dem" "ein" "eine" "einer" "einem" "einen" "am" "an" "in" "im" "über" "für" "auf" "von" "vom" "zu" "es"))
 
 (defun rr--transform-string-to-cloze (txt)
   ;; replace every second character as .
   ;; for txt beschleunigung
   ;; should return .e.c.l.u.i.u.g
   ;; for text shorter than 5 chars, make x___
-  (if (> (length txt) 4)
-      (let* ((counter 0)
-	     (chtext (mapconcat (lambda (x) (if (= counter 0)
-						(progn
-						  (setq counter 1)
-						  (make-string 1 rr--cloze-hide-char))
-					      (progn
-						(setq counter 0)
-						(string x)
-						)))
-				txt "" )))
-	(aset chtext (- (length chtext) 1) rr--cloze-hide-char)
-	chtext)
-    ;; else length <= 4
-    (let ((ret (make-string (length txt) rr--cloze-hide-char)))
-      (aset ret 0 (elt txt 0))
-      ret)))
+  ;; if text is on the special list retunr ____
+  (let ((onlist nil))
+    (mapc #'(lambda (el) (when (string-equal (downcase txt) el)
+                          (setq onlist 't))) rr--cloze-hide-table)
+    (if onlist
+        (make-string (length txt) rr--cloze-hide-char)
+      ;; not on the list
+      (if (> (length txt) 4)
+          (let* ((counter 0)
+	             (chtext (mapconcat (lambda (x) (if (= counter 0)
+						                            (progn
+						                              (setq counter 1)
+						                              (make-string 1 rr--cloze-hide-char))
+					                              (progn
+						                            (setq counter 0)
+						                            (string x)
+						                            )))
+				                    txt "" )))
+	        (aset chtext (- (length chtext) 1) rr--cloze-hide-char)
+	        chtext)
+        ;; else length <= 4
+        (let ((ret (make-string (length txt) rr--cloze-hide-char)))
+          (aset ret 0 (elt txt 0))
+          ret)))))
 
 
 
@@ -273,8 +289,60 @@ buffer, use IVY to select candidate"
   (rr--put-in-subheading (with-temp-buffer
 			  (yank)
 			  (buffer-substring-no-properties (point-min) (point-max)))))
-  
-;; reverso context
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; tatoeboa
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun rr--tatoeba-lookup-word-gen-list (word)
+  ;; (get-buffer-create "workingxml")
+  ;; (set-buffer "workingxml")
+  ;; (erase-buffer)
+  (when (> (length word) 3)
+    (with-temp-buffer
+      (call-process "grep" nil t nil word (concat (getenv "HOME") "/" "tatoeba.csv") "-i")
+      (goto-char (point-min))
+      (let ((breakloop 0)
+	        (lista nil))
+	    (while (= breakloop 0)
+	      ;;(message "%s" (buffer-substring-no-properties  (line-beginning-position) (line-end-position)))
+	      (setq lista (append lista (list
+				                     (concat (buffer-substring-no-properties  (line-beginning-position) (line-end-position))
+					                         ""))))
+	      (setq breakloop (forward-line 1)))
+	    lista))))
+
+
+(defun rr-counsel-tatoeba-lookup-word (markstart markend)
+  "generate list of text from the dictionary"
+  (interactive "r")
+
+  (let ((initword (word-at-point)))
+    (when (use-region-p)
+      ;; we started with highlighted region
+      (setq initword (buffer-substring-no-properties markstart markend)))
+    (ivy-read "Select word (at least 4 chars: " 'rr--tatoeba-lookup-word-gen-list
+	          :caller 'rr-counsel-tatoeba-lookup-word
+	          :dynamic-collection t
+	          :initial-input initword
+	          :action #'(lambda (selected)
+			              (kill-new selected)
+			              (message "copied to kill ring")))))
+
+(defun rr-cousel-tatoeba-lookup-word-put-subheading (markstart markend)
+  "get dictionary result and put in org subheading"
+  (interactive "r")
+  (rr-counsel-tatoeba-lookup-word markstart markend)
+  (rr--put-in-subheading (with-temp-buffer
+			               (yank)
+			               (buffer-substring-no-properties (point-min) (point-max)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; reverso
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 (defun rr--reverso-get-xml (word lang)
   ;; connects with the reverso site, gets html and returns parsed xml
@@ -373,7 +441,7 @@ buffer, use IVY to select candidate"
 	      :initial-input initword
 	      :action #'(lambda (selected)
 			  (kill-new (replace-regexp-in-string
-				     "\\([[:print:]]*\\)\n/\\([[:print:]]*\\)/" "* \\1 \n\n** \\2 " selected))
+				     "\\([[:print:]]*\\)\n/\\([[:print:]]*\\)/" "* \\1 \n** \\2 " selected))
 			  (message "copied to kill ring")))))
 
 
